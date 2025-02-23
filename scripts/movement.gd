@@ -10,30 +10,37 @@ extends CharacterBody3D
 @export var move_enabled : bool = true
 @export var jump_when_held : bool = true
 @export_category("Input Definition")
-@export var sensitivity : Vector2 = Vector2.ONE
+@export var sensitivity : Vector2 = Vector2(.1,.1)
 
 @export_category("Movement Variables")
-var jump_amount : int = 2
-@export var max_jump_amount : int = 2
+var jump_amount : int = 1
+@export var max_jump_amount : int = 1
 @export var gravity : float = 30
-@export var ground_accel : float = 50
-@export var air_accel : float = 15
+@export var ground_accel : float = 75
 @export var max_ground_vel : float = 20
-@export var max_air_vel : float = 800
 @export var jump_force : float = 1
-@export var friction : float = 6
-@export var additive_hop : bool = true
+@export var friction : float = 5
+var additive_hop : bool = false
 @export var crouching : bool = false
 @export var soft_speed_cap : float = 100
 @export var stopping_time: float = .5
 @export var jump_time :float = 5
 @export var jump_wait_time : float = 10
-@export var wall_fall_speed : float = 5
+@export var wall_fall_speed : float = 8
 @export var wall_fall_mult : float = 2
 
+@export_category("Air Vars")
+@export var air_accel : float = 15
+@export var max_air_vel : float = 800
+@export var air_control : float = 3
+var wallrunning:bool = false
+var wallrun_timer: float = 0
+var time_since_wallrun: float = 0
+@export var wall_jump_gain: int = 1
+@export var camera_tilt_time: int = 20
 
 @export_category("Slide")
-@export var slide_accel : float = 250
+@export var slide_accel : float = 400
 @export var max_slide_vel : float = 1000
 @export var sliding : bool = false
 @export var just_sliding: bool = false
@@ -54,20 +61,19 @@ var norm_height: float = 1
 @export var camera : Camera3D
 @export var norm_shape : CollisionShape3D
 
+
 var stopped_time : float = 0
 var slide_time : float = 0
 
 func update_mouse_mode():
 	if look_enabled && camera:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-			
 	else: 
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func mouse_look(event):
-	if look_enabled && camera:
-		if event == InputEventMouseMotion:
-			print(event.relative.x + ": mouse x")
+	if look_enabled:
+		if event is InputEventMouseMotion:
 			rotate_y(deg_to_rad(-event.relative.x * sensitivity.y))
 			camera.rotate_x(deg_to_rad(-event.relative.y * sensitivity.x))
 			camera.rotation.x = clamp(camera.rotation.x, deg_to_rad(-89), deg_to_rad(89))
@@ -90,13 +96,16 @@ func get_jump():
 
 
 func accelleration(accel_dir, prevVelocity, acceleration, max_vel, delta):
+	if accel_dir.length() > 1:
+		accel_dir *= .5
+	
 	var projVel:float = prevVelocity.dot(accel_dir)
 	var accelVel:float = acceleration * delta
 	
 	if((projVel + accelVel) > max_vel):
 		accelVel = max_vel - projVel;
 	
-	print(prevVelocity + accel_dir*accelVel)
+	print((prevVelocity + accel_dir*accelVel).length())
 	
 	return prevVelocity + accel_dir*accelVel
 
@@ -105,6 +114,7 @@ func get_next_velocity(prevVel, delta):
 	var grounded = is_on_floor()
 	var can_jump = (jump_time > jump_wait_time if !is_on_floor() else true)
 	
+	additive_hop = true if sliding else false
 	
 	var our_velocity = prevVel
 	if grounded && !sliding:
@@ -131,16 +141,24 @@ func get_next_velocity(prevVel, delta):
 	return our_velocity
 
 func calc_gravity(our_velocity, delta):
-	if is_on_wall() && abs(get_wall_normal().dot(transform.basis.x)) < .3:
-		if our_velocity.length() < wall_fall_speed:
-			our_velocity += Vector3.DOWN * delta
+	if is_on_wall() && abs(get_wall_normal().dot(transform.basis.x)) > .6:
+		if our_velocity.length() > wall_fall_speed && (get_wishdir().dot(get_wall_normal()) < -.6):
+			if wallrunning == false:
+				wallrunning = true
 			return our_velocity
 		else:
+			if wallrunning == true:
+				wallrunning = false
 			our_velocity += Vector3.DOWN * (gravity * delta)/ wall_fall_mult
 			return our_velocity
+	if wallrunning == true:
+			wallrunning = false
 	our_velocity += Vector3.DOWN * (gravity * delta)
 	return our_velocity
 	
+
+func wall_run(wallnorm):
+	pass #TODO: wallrun stuffs
 
 func air_kick(accelDir:Vector3, prevVelocity, delta):
 	if accelDir.dot(prevVelocity) < 0:
@@ -168,10 +186,17 @@ func moveJustSlide(accelDir, prevVelocity, delta):
 	
 
 func moveAir(accelDir, prevVelocity, delta):
+	
+	#TODO:air control
+	
+	prevVelocity = Vector3(prevVelocity.x, prevVelocity.y, prevVelocity.z)
+	
 	return accelleration(accelDir, prevVelocity, air_accel, max_air_vel, delta)
 
 func update_frame_timer():
 	if is_on_floor():
+		wallrun_timer = 0
+		time_since_wallrun += 1
 		jump_amount = max_jump_amount
 		jump_time = 0
 		if sliding:
@@ -179,7 +204,14 @@ func update_frame_timer():
 			return
 		time_since_slide += 1
 		slide_time = 0
-	else: slide_time = 0; jump_time += 1
+	elif is_on_wall():
+		if wallrunning:
+			wallrun_timer += 1
+			time_since_wallrun = 0
+			slide_time = 0
+			jump_time = 0
+			jump_amount = wall_jump_gain
+	else: slide_time = 0; jump_time += 1; time_since_slide += 1; wallrun_timer = 0; time_since_wallrun += 1
 
 func handle_movement(delta):
 	update_frame_timer()
@@ -194,6 +226,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	mouse_look(event)
 	if event.is_action_pressed("escape"):
 		get_tree().quit()
+	elif event.is_action_pressed("Restart"):
+		get_tree().reload_current_scene()
 
 func _ready() -> void:
 	norm_height = scale.y
