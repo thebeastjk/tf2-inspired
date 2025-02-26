@@ -26,7 +26,7 @@ var additive_hop : bool = false
 @export var stopping_time: float = .5
 @export var jump_time :float = 5
 @export var jump_wait_time : float = 10
-@export var wall_fall_speed : float = 8
+@export var wall_fall_speed : float = 6
 @export var wall_fall_mult : float = 2
 
 @export_category("Air Vars")
@@ -36,7 +36,11 @@ var additive_hop : bool = false
 var wallrunning:bool = false
 var wallrun_timer: float = 0
 var time_since_wallrun: float = 0
-@export var wall_jump_gain: int = 1
+@export var wall_jump_gain: float = 10
+@export var wall_kick_gain: float = 5
+@export var wall_pull:float = 5
+@export var max_wall_time: float = 5
+@export var jump_was_just_wallrunning:bool = false
 @export var camera_tilt_time: int = 20
 
 @export_category("Slide")
@@ -91,7 +95,7 @@ func get_wishdir():
 		(transform.basis.x * Input.get_axis("Left", "Right"))
 
 func get_jump():
-	return sqrt(4 * jump_force * gravity)
+	return sqrt(4 * jump_force * gravity) if !wallrunning else sqrt(8*jump_force*gravity)
 		
 
 
@@ -119,6 +123,8 @@ func get_next_velocity(prevVel, delta):
 	var our_velocity = prevVel
 	if grounded && !sliding:
 		our_velocity = moveGround(get_wishdir(), prevVel, delta)
+	elif wallrunning:
+		our_velocity = wall_run(get_wishdir(), get_wall_normal(), prevVel, delta)
 	elif grounded && just_sliding:
 		our_velocity = moveJustSlide(get_wishdir(), prevVel, delta)
 	elif grounded && sliding:
@@ -128,27 +134,35 @@ func get_next_velocity(prevVel, delta):
 	else:
 		our_velocity = moveAir(get_wishdir(), prevVel, delta)
 	
+	print(wallrunning)
+	
 	our_velocity = calc_gravity(our_velocity, delta)
-	if((Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) && move_enabled && can_jump && jump_amount > 0):
+	if((Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) && move_enabled && can_jump && jump_amount > 0) || (wallrunning && (Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) ):
 		#print(jump_amount)
 		if !grounded:
 			air_kick(get_wishdir(), prevVel, delta)
-		jump_amount -= 1
+		
 		jump_time = 0
+		if wallrunning:
+			our_velocity += get_wall_normal() * wall_jump_gain
+			jump_was_just_wallrunning = true
+		else:
+			jump_amount -= 1
 		our_velocity.y = get_jump()
 		
 	
 	return our_velocity
 
 func calc_gravity(our_velocity, delta):
-	if is_on_wall() && abs(get_wall_normal().dot(transform.basis.x)) > .6:
-		if our_velocity.length() > wall_fall_speed && (get_wishdir().dot(get_wall_normal()) < -.6):
+	if is_on_wall() && abs(get_wall_normal().dot(transform.basis.x)) > .6  && (get_wishdir().dot(get_wall_normal()) < -.5):
+		if our_velocity.length() > wall_fall_speed:
 			if wallrunning == false:
 				wallrunning = true
 			return our_velocity
 		else:
 			if wallrunning == true:
 				wallrunning = false
+				our_velocity += get_wall_normal() * wall_kick_gain
 			our_velocity += Vector3.DOWN * (gravity * delta)/ wall_fall_mult
 			return our_velocity
 	if wallrunning == true:
@@ -157,8 +171,21 @@ func calc_gravity(our_velocity, delta):
 	return our_velocity
 	
 
-func wall_run(wallnorm):
-	pass #TODO: wallrun stuffs
+func wall_run(accelDir, wallnorm, prevVelocity, delta):
+	var wishDir:Vector3 = accelDir / (wallnorm * wall_pull)
+	if !wishDir.is_finite():
+		wishDir = accelDir
+	
+	prevVelocity -= Vector3(0, prevVelocity.y,0)
+	
+	if wallrun_timer >= max_wall_time:
+		wishDir.x = 0
+		wishDir += get_wall_normal() * wall_kick_gain
+		#TODO: make sure players can't grab wall right after they leave
+	
+	return accelleration(wishDir, prevVelocity, air_accel, max_air_vel, delta)
+	
+	#TODO: wallrun stuffs
 
 func air_kick(accelDir:Vector3, prevVelocity, delta):
 	if accelDir.dot(prevVelocity) < 0:
@@ -189,12 +216,16 @@ func moveAir(accelDir, prevVelocity, delta):
 	
 	#TODO:air control
 	
+	#if jump_was_just_wallrunning:
+		
+	
 	prevVelocity = Vector3(prevVelocity.x, prevVelocity.y, prevVelocity.z)
 	
 	return accelleration(accelDir, prevVelocity, air_accel, max_air_vel, delta)
 
 func update_frame_timer():
 	if is_on_floor():
+		jump_was_just_wallrunning = false
 		wallrun_timer = 0
 		time_since_wallrun += 1
 		jump_amount = max_jump_amount
@@ -210,7 +241,7 @@ func update_frame_timer():
 			time_since_wallrun = 0
 			slide_time = 0
 			jump_time = 0
-			jump_amount = wall_jump_gain
+			jump_amount = max_jump_amount
 	else: slide_time = 0; jump_time += 1; time_since_slide += 1; wallrun_timer = 0; time_since_wallrun += 1
 
 func handle_movement(delta):

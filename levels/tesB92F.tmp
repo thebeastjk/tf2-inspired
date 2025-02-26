@@ -19,9 +19,42 @@ data = PackedVector3Array(-59.5559, 0.1339, -59.5559, 59.5559, 0.1339, -59.5559,
 
 [node name="CharacterBody3D" parent="." instance=ExtResource("1_72rwi")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.527362, 2.37157, 1.05656)
-jump_when_held = false
+look_enabled = null
+move_enabled = null
+jump_when_held = null
+sensitivity = null
+max_jump_amount = null
+gravity = null
+ground_accel = null
+max_ground_vel = null
+jump_force = null
+friction = null
+crouching = null
+soft_speed_cap = null
+stopping_time = null
+jump_time = null
+jump_wait_time = null
+wall_fall_speed = null
+wall_fall_mult = null
+air_accel = null
+max_air_vel = null
+air_control = null
+wall_jump_gain = null
+camera_tilt_time = null
 slide_accel = 300.0
 max_slide_vel = 20.0
+sliding = null
+just_sliding = null
+max_slide_time = null
+slide_needed_vel = null
+slide_stop_needed_vel = null
+slide_height = null
+slide_ease_time = null
+time_since_slide = null
+slide_ease_out_time = null
+slide_friction = null
+slide_ignore_friction_speed = null
+slide_ignore_friction_time = null
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_q2a8v")
