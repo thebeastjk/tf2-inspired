@@ -41,6 +41,7 @@ var time_since_wallrun: float = 0
 @export var wall_pull:float = 5
 @export var max_wall_time: float = 5
 @export var jump_was_just_wallrunning:bool = false
+var just_wallrunning_direction:Vector3
 @export var camera_tilt_time: int = 20
 
 @export_category("Slide")
@@ -137,7 +138,7 @@ func get_next_velocity(prevVel, delta):
 	print(wallrunning)
 	
 	our_velocity = calc_gravity(our_velocity, delta)
-	if((Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) && move_enabled && can_jump && jump_amount > 0) || (wallrunning && (Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) ):
+	if((Input.is_action_pressed("Jump") if jump_when_held else Input.is_action_just_pressed("Jump")) && move_enabled && can_jump && jump_amount > 0) || (wallrunning && (Input.is_action_just_pressed("Jump")) ):
 		#print(jump_amount)
 		if !grounded:
 			air_kick(get_wishdir(), prevVel, delta)
@@ -181,6 +182,8 @@ func wall_run(accelDir, wallnorm, prevVelocity, delta):
 	if wallrun_timer >= max_wall_time:
 		wishDir.x = 0
 		wishDir += get_wall_normal() * wall_kick_gain
+		jump_was_just_wallrunning = true
+		just_wallrunning_direction = accelDir
 		#TODO: make sure players can't grab wall right after they leave
 	
 	return accelleration(wishDir, prevVelocity, air_accel, max_air_vel, delta)
@@ -216,8 +219,8 @@ func moveAir(accelDir, prevVelocity, delta):
 	
 	#TODO:air control
 	
-	#if jump_was_just_wallrunning:
-		
+	if jump_was_just_wallrunning && accelDir == just_wallrunning_direction:
+		accelDir = Vector3.ZERO
 	
 	prevVelocity = Vector3(prevVelocity.x, prevVelocity.y, prevVelocity.z)
 	
